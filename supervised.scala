@@ -1,6 +1,6 @@
 import org.apache.spark.ml.classification.{LogisticRegression, NaiveBayes}
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer, VectorAssembler}
+import org.apache.spark.ml.feature._
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.sql.SparkSession
@@ -39,10 +39,10 @@ object supervised {
     val idf = new IDF()
     //
     ////    ----------------------------------------Ayto thelei optimize....---------------------------------
-    tokenizer.setInputCol("product_title").setOutputCol("tok_title")
-    hashingTF.setInputCol("tok_title").setOutputCol("titleFeatures").setNumFeatures(20000)
-    idf.setInputCol("titleFeatures").setOutputCol("titleTFIDF")
-//
+        tokenizer.setInputCol("product_title").setOutputCol("tok_title")
+        hashingTF.setInputCol("tok_title").setOutputCol("titleFeatures").setNumFeatures(20000)
+        idf.setInputCol("titleFeatures").setOutputCol("titleTFIDF")
+
     val DF_1 = hashingTF.transform(tokenizer.transform(DF_0)).drop("product_title").drop("tok_title")
     val DF_2 = idf.fit(DF_1).transform(DF_1).drop("titleFeatures")
 
@@ -60,20 +60,20 @@ object supervised {
 
     val DF_5 = hashingTF.transform(tokenizer.transform(DF_4)).drop("product_description").drop("tok_desc")
     val DF_6 = idf.fit(DF_5).transform(DF_5).drop("descFeatures")
-
+//
     val assembler = new VectorAssembler()
       .setInputCols(Array( "titleTFIDF", "termTFIDF", "descTFIDF"))
       .setOutputCol("features")
 
 
-    val finalDF = assembler.transform(DF_6).withColumn("relevance", udf_toDouble($"relevance")).withColumnRenamed("relevance", "label")
+    val finalDF = assembler.transform(DF_6).withColumnRenamed("relevance", "label")
       .drop("titleTFIDF")
       .drop("termTFIDF")
       .drop("descTFIDF")
 //////    ----------------------------------------------------------------------------------------------------------------------
 ////
-    finalDF.printSchema()
-    finalDF.take(2).foreach(println)
+//    finalDF.printSchema()
+//    finalDF.take(2).foreach(println)
 
 //
 //    /* ======================================================= */
@@ -84,19 +84,18 @@ object supervised {
 //
 //    // Split the data into training and test sets (30% held out for testing)
     val Array(trainingData, testData) = finalDF.randomSplit(Array(0.6, 0.4), seed = 1234L)
-
-
+    
     val lr = new LinearRegression()
       .setMaxIter(100)
       .setRegParam(0.1)
       .setElasticNetParam(0)
       .fit(trainingData)
 
-    val trainingSum = lr.summary
+    val results = lr.transform(testData).drop("features").drop("id").drop("product_uid")
 
-    print("Mean Squered Error: ")
-    println(trainingSum.meanSquaredError)
+    print("Mean Squared Error: ")
 
+    results.map(r => math.pow((r.getDouble(0) - r.getDouble(1)),2)).select(mean($"value")).show()
 
     println("Done!")
 
